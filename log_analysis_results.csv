@@ -1,0 +1,91 @@
+import re
+import csv
+from collections import defaultdict
+
+# Constants
+LOG_FILE = 'sample.log'
+OUTPUT_CSV = 'log_analysis_results.csv'
+FAILED_LOGIN_THRESHOLD = 10
+
+def parse_log_file():
+    """Parse the log file and extract relevant information."""
+    ip_requests = defaultdict(int)
+    endpoints = defaultdict(int)
+    failed_logins = defaultdict(int)
+
+    with open(LOG_FILE, 'r') as log_file:
+        for line in log_file:
+            # Extract IP address
+            ip_match = re.match(r'(\d+\.\d+\.\d+\.\d+)', line)
+            if ip_match:
+                ip_address = ip_match.group(1)
+                ip_requests[ip_address] += 1
+
+            # Extract endpoint
+            endpoint_match = re.search(r'"(?:GET|POST|PUT|DELETE)\s([^\s]+)', line)
+            if endpoint_match:
+                endpoint = endpoint_match.group(1)
+                endpoints[endpoint] += 1
+
+            # Detect failed login attempts (HTTP status code 401)
+            if '401' in line or 'Invalid credentials' in line:
+                ip_address = ip_match.group(1)  # Same IP as the login attempt
+                failed_logins[ip_address] += 1
+
+    return ip_requests, endpoints, failed_logins
+
+def count_requests_per_ip(ip_requests):
+    """Print the number of requests per IP address sorted in descending order."""
+    print("IP Address           Request Count")
+    for ip, count in sorted(ip_requests.items(), key=lambda x: x[1], reverse=True):
+        print(f"{ip:<20} {count}")
+
+def identify_most_accessed_endpoint(endpoints):
+    """Print the most frequently accessed endpoint."""
+    if endpoints:
+        most_accessed = max(endpoints.items(), key=lambda x: x[1])
+        print("\nMost Frequently Accessed Endpoint:")
+        print(f"{most_accessed[0]} (Accessed {most_accessed[1]} times)")
+
+def detect_suspicious_activity(failed_logins):
+    """Print flagged IP addresses with failed login attempts exceeding the threshold."""
+    print("\nSuspicious Activity Detected:")
+    for ip, count in failed_logins.items():
+        if count > FAILED_LOGIN_THRESHOLD:
+            print(f"{ip:<20} {count}")
+
+def save_to_csv(ip_requests, endpoints, failed_logins):
+    """Save the analysis results to a CSV file."""
+    with open(OUTPUT_CSV, 'w', newline='') as csvfile:
+        fieldnames = ['Category', 'Item', 'Count']
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+
+        # Requests per IP
+        for ip, count in ip_requests.items():
+            writer.writerow({'Category': 'Requests per IP', 'Item': ip, 'Count': count})
+
+        # Most Accessed Endpoint
+        most_accessed = max(endpoints.items(), key=lambda x: x[1])
+        writer.writerow({'Category': 'Most Accessed Endpoint', 'Item': most_accessed[0], 'Count': most_accessed[1]})
+
+        # Suspicious Activity
+        for ip, count in failed_logins.items():
+            if count > FAILED_LOGIN_THRESHOLD:
+                writer.writerow({'Category': 'Suspicious Activity', 'Item': ip, 'Count': count})
+
+def main():
+    # Parse log file
+    ip_requests, endpoints, failed_logins = parse_log_file()
+
+    # Display the analysis results
+    count_requests_per_ip(ip_requests)
+    identify_most_accessed_endpoint(endpoints)
+    detect_suspicious_activity(failed_logins)
+
+    # Save the results to a CSV file
+    save_to_csv(ip_requests, endpoints, failed_logins)
+    print(f"\nResults saved to {OUTPUT_CSV}")
+
+if __name__ == '__main__':
+    main()
